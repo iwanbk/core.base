@@ -3,9 +3,9 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/g8os/core/agent/lib/pm"
-	"github.com/g8os/core/agent/lib/pm/core"
-	"github.com/g8os/core/agent/lib/utils"
+	"github.com/g8os/core.base/pm"
+	"github.com/g8os/core.base/pm/core"
+	"github.com/g8os/core.base/utils"
 	"net"
 	"os"
 )
@@ -75,7 +75,7 @@ func (l *Local) server(con net.Conn) {
 
 	runner, err := pm.GetManager().GetRunner(cmd, false)
 	if err != nil {
-		lresult.Error = fmt.Sprintf("Failed to get job runner for command(%s): %s", cmd.Name, err)
+		lresult.Error = fmt.Sprintf("Failed to get job runner for command(%s): %s", cmd.Command, err)
 		return
 	}
 
