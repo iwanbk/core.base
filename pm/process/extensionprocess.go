@@ -49,7 +49,7 @@ func NewExtensionProcessFactory(exe string, dir string, args []string, env map[s
 	return constructor
 }
 
-func (process *extensionProcess) Cmd() *core.Command {
+func (process *extensionProcess) Command() *core.Command {
 	return process.cmd
 }
 

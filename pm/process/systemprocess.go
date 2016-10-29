@@ -3,8 +3,8 @@ package process
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Jumpscale/agent8/agent/lib/pm/stream"
 	"github.com/g8os/core.base/pm/core"
+	"github.com/g8os/core.base/pm/stream"
 	psutils "github.com/shirou/gopsutil/process"
 	"os/exec"
 	"path"
@@ -240,7 +240,7 @@ func (process *systemProcessImpl) Run() (<-chan *stream.Message, error) {
 	errConsumer := stream.NewConsumer(stderr, 2)
 	errConsumer.Consume(msgInterceptor)
 
-	if len(process.args.StdIn) {
+	if len(process.args.StdIn) != 0 {
 		//write data to command stdin.
 		_, err = stdin.Write(process.args.StdIn)
 		if err != nil {

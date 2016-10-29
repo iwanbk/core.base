@@ -1,16 +1,15 @@
 package core
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"github.com/g8os/core/agent/lib/pm"
-	"github.com/g8os/core/agent/lib/pm/core"
-	"github.com/g8os/core/agent/lib/settings"
-	"io/ioutil"
+	"github.com/g8os/core.base/pm"
+	"github.com/g8os/core.base/pm/core"
+	"github.com/g8os/core.base/settings"
 	"net/url"
-	"strings"
 	"time"
+)
+
+const (
+	ReconnectSleepTime = 10 * time.Second
 )
 
 type poller struct {
@@ -37,16 +36,7 @@ func newPoller(key string, controller *settings.ControllerClient) *poller {
 }
 
 func (poll *poller) longPoll() {
-	lastfail := time.Now().Unix()
-	controller := poll.controller
-	client := controller.Client
-	config := settings.Settings
-
-	sendStartup := true
-
-	event, _ := json.Marshal(map[string]string{
-		"name": "startup",
-	})
+	lastError := time.Now()
 
 	pollQuery := make(url.Values)
 
@@ -54,89 +44,33 @@ func (poll *poller) longPoll() {
 		pollQuery.Add("role", role)
 	}
 
-	pollURL := fmt.Sprintf("%s?%s", controller.BuildURL("cmd"),
-		pollQuery.Encode())
-
 	for {
-		if sendStartup {
-			//this happens on first loop, or if the connection to the controller was gone and then
-			//restored.
-			reader := bytes.NewBuffer(event)
-
-			url := controller.BuildURL("event")
-
-			resp, err := client.Post(url, "application/json", reader)
-			if err != nil {
-				log.Warningf("Failed to send startup event to controller '%s': %s", url, err)
-			} else {
-				resp.Body.Close()
-				sendStartup = false
-			}
-		}
-
-		response, err := client.Get(pollURL)
+		var command core.Command
+		err := poll.controller.GetNext(&command)
 		if err != nil {
-			log.Infof("No new commands, retrying ... '%s' [%s]", controller.URL, err)
-			//HTTP Timeout
-			if strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "EOF") {
-				//make sure to send startup even on the next try. In case
-				//agent controller was down or even booted after the agent.
-				sendStartup = true
+			log.Errorf("Failed to get next command from %s: %s", poll.controller.URL, err)
+			if time.Now().Sub(lastError) < ReconnectSleepTime {
+				time.Sleep(ReconnectSleepTime)
 			}
-
-			if time.Now().Unix()-lastfail < ReconnectSleepTime {
-				time.Sleep(ReconnectSleepTime * time.Second)
-			}
-			lastfail = time.Now().Unix()
+			lastError = time.Now()
 
 			continue
-		}
-
-		body, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			log.Errorf("Failed to load response content: %s", err)
-			continue
-		}
-
-		response.Body.Close()
-		if response.StatusCode != 200 {
-			log.Errorf("Failed to retrieve jobs (%s): %s", response.Status, string(body))
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		if len(body) == 0 {
-			//no data, can be a long poll timeout
-			continue
-		}
-
-		cmd, err := core.LoadCmd(body)
-		if err != nil {
-			log.Errorf("Failed to load cmd (%s): %s", err, string(body))
-			continue
-		}
-
-		//set command defaults
-		//1 - stats_interval
-		meterInt := cmd.Args.GetInt("stats_interval")
-		if meterInt == 0 {
-			cmd.Args.Set("stats_interval", config.Stats.Interval)
 		}
 
 		//tag command for routing.
-		ctrlConfig := controller.Config
-		cmd.Args.SetTag(poll.key)
-		cmd.Args.SetController(ctrlConfig)
+		//ctrlConfig := controller.Config
+		//cmd.Args.SetTag(poll.key)
+		//cmd.Args.SetController(ctrlConfig)
 
-		cmd.Gid = settings.Options.Gid()
-		cmd.Nid = settings.Options.Nid()
+		command.Gid = settings.Options.Gid()
+		command.Nid = settings.Options.Nid()
 
-		log.Infof("Starting command %s", cmd)
+		log.Infof("Starting command %s", command)
 
-		if cmd.Args.GetString("queue") == "" {
-			pm.GetManager().PushCmd(cmd)
+		if command.Queue == "" {
+			pm.GetManager().PushCmd(&command)
 		} else {
-			pm.GetManager().PushCmdToQueue(cmd)
+			pm.GetManager().PushCmdToQueue(&command)
 		}
 	}
 }

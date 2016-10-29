@@ -1,6 +1,7 @@
 package pm
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/g8os/core.base/pm/core"
@@ -172,7 +173,7 @@ func (pm *PM) GetRunner(cmd *core.Command, hooksOnExit bool, hooks ...RunnerHook
 func (pm *PM) RunCmd(cmd *core.Command, hooksOnExit bool, hooks ...RunnerHook) Runner {
 	runner, err := pm.GetRunner(cmd, hooksOnExit, hooks...)
 	if err == UnknownCommandErr {
-		log.Errorf("Unknow command '%s'", cmd.Name)
+		log.Errorf("Unknow command '%s'", cmd.Command)
 		errResult := core.NewBasicJobResult(cmd)
 		errResult.State = core.StateUnknownCmd
 		pm.resultCallback(cmd, errResult)
@@ -289,13 +290,14 @@ func (pm *PM) RunSlice(slice settings.StartupSlice) {
 			startup.Args = make(map[string]interface{})
 		}
 
+		args, _ := json.Marshal(startup.Args)
+
 		cmd := &core.Command{
-			Gid:  settings.Options.Gid(),
-			Nid:  settings.Options.Nid(),
-			ID:   startup.Key(),
-			Name: startup.Name,
-			Stdin: startup.Data,
-			Args: core.NewMapArgs(startup.Args),
+			Gid:       settings.Options.Gid(),
+			Nid:       settings.Options.Nid(),
+			ID:        startup.Key(),
+			Command:   startup.Name,
+			Arguments: json.RawMessage(args),
 		}
 
 		all = append(all, cmd.ID)
@@ -303,11 +305,6 @@ func (pm *PM) RunSlice(slice settings.StartupSlice) {
 		provided[cmd.ID] = 1
 		for _, k := range startup.After {
 			needed[k] = 1
-		}
-
-		meterInt := cmd.Args.GetInt("stats_interval")
-		if meterInt == 0 {
-			cmd.Args.Set("stats_interval", settings.Settings.Stats.Interval)
 		}
 
 		go func(up settings.Startup, c *core.Command) {
@@ -364,7 +361,7 @@ func (pm *PM) Kill(cmdID string) {
 }
 
 func (pm *PM) msgCallback(cmd *core.Command, msg *stream.Message) {
-	levels := cmd.Args.GetIntArray("loglevels")
+	levels := cmd.LogLevels
 	if len(levels) > 0 && !utils.In(levels, msg.Level) {
 		return
 	}
@@ -380,7 +377,7 @@ func (pm *PM) msgCallback(cmd *core.Command, msg *stream.Message) {
 
 func (pm *PM) resultCallback(cmd *core.Command, result *core.JobResult) {
 	result.Tags = cmd.Tags
-	result.Arguments = cmd.Args
+	result.Arguments = cmd.Arguments
 
 	for _, handler := range pm.resultHandlers {
 		handler(cmd, result)

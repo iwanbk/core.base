@@ -24,7 +24,7 @@ func GetProcessFactory(cmd *core.Command) process.ProcessFactory {
 /*
 RegisterCmd registers a new command (extension) so it can be executed via commands
 */
-func RegisterCmd(cmd string, exe string, workdir string, cmdargs []string, env []string) {
+func RegisterCmd(cmd string, exe string, workdir string, cmdargs []string, env map[string]string) {
 	CmdMap[cmd] = process.NewExtensionProcessFactory(exe, workdir, cmdargs, env)
 }
 
