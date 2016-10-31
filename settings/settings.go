@@ -60,32 +60,27 @@ type Security struct {
 }
 
 //Controller url and certificates
-type Controller struct {
+type SinkConfig struct {
 	URL      string
 	Password string
 }
 
 //Settings main agent settings
 type AppSettings struct {
-	Main struct {
-		MaxJobs       int
-		MessageIDFile string
-		Include       string
-		Network       string
+	Main      struct {
+		MaxJobs int
+		Include string
+		Network string
 	}
 
-	Controllers map[string]Controller
+	Sink      map[string]SinkConfig
 
 	Extension map[string]Extension
 
-	Logging map[string]Logger
+	Logging   map[string]Logger
 
-	Stats struct {
+	Stats     struct {
 		Interval int
-		Ac       struct {
-			Enabled     bool
-			Controllers []string
-		}
 		Redis struct {
 			Enabled       bool
 			FlushInterval int
@@ -93,7 +88,7 @@ type AppSettings struct {
 		}
 	}
 
-	Channel struct {
+	Channel   struct {
 		Cmds []string
 	}
 }
@@ -102,12 +97,12 @@ var Settings AppSettings
 
 func (s *AppSettings) Validate() []error {
 	errors := make([]error, 0)
-	for name, con := range s.Controllers {
+	for name, con := range s.Sink {
 		if u, err := url.Parse(con.URL); err != nil {
-			verr := fmt.Errorf("[controller.%s] `url`: %s", name, err)
+			verr := fmt.Errorf("[sink.%s] `url`: %s", name, err)
 			errors = append(errors, verr)
-		} else if !utils.InString([]string{"http", "https"}, strings.ToLower(u.Scheme)) {
-			verr := fmt.Errorf("[controller.%s] `url` has unknown schema (%s)", name, u.Scheme)
+		} else if !utils.InString([]string{"redis"}, strings.ToLower(u.Scheme)) {
+			verr := fmt.Errorf("[sink.%s] `url` has unknown schema (%s), only redis is allowed atm", name, u.Scheme)
 			errors = append(errors, verr)
 		}
 	}

@@ -17,7 +17,7 @@ const (
 /*
 ControllerClient represents an active agent controller connection.
 */
-type ControllerClient struct {
+type SinkClient struct {
 	URL   string
 	Redis *redis.Pool
 }
@@ -25,7 +25,7 @@ type ControllerClient struct {
 /*
 NewControllerClient gets a new agent controller connection
 */
-func (c *Controller) GetClient() (*ControllerClient, error) {
+func (c *SinkConfig) GetClient() (*SinkClient, error) {
 	u, err := url.Parse(c.URL)
 	if err != nil {
 		return nil, err
@@ -36,11 +36,11 @@ func (c *Controller) GetClient() (*ControllerClient, error) {
 	}
 
 	pool := utils.NewRedisPool(u.Host, c.Password)
-	if _, err := pool.Get().Do("PING"); err != nil {
-		return nil, err
-	}
+	//if _, err := pool.Get().Do("PING"); err != nil {
+	//	return nil, err
+	//}
 
-	client := &ControllerClient{
+	client := &SinkClient{
 		URL:   strings.TrimRight(c.URL, "/"),
 		Redis: pool,
 	}
@@ -48,26 +48,30 @@ func (c *Controller) GetClient() (*ControllerClient, error) {
 	return client, nil
 }
 
-func (client *ControllerClient) DefaultQueue() string {
+func (client *SinkClient) DefaultQueue() string {
 	return fmt.Sprintf("core:default:%v:%v",
 		Options.Gid(),
 		Options.Nid(),
 	)
 }
 
-func (cl *ControllerClient) GetNext(command *core.Command) error {
+func (cl *SinkClient) GetNext(command *core.Command) error {
 	db := cl.Redis.Get()
 	defer db.Close()
 
-	payload, err := redis.Bytes(db.Do("BLPOP", cl.DefaultQueue()))
+	payload, err := redis.ByteSlices(db.Do("BLPOP", cl.DefaultQueue(), 0))
 	if err != nil {
 		return err
 	}
 
-	return json.Unmarshal(payload, command)
+	return json.Unmarshal(payload[1], command)
 }
 
-func (cl *ControllerClient) Respond(result *core.JobResult) error {
+func (cl *SinkClient) Respond(result *core.JobResult) error {
+	if result.ID == "" {
+		return fmt.Errorf("result with no ID, not pushing results back...")
+	}
+
 	db := cl.Redis.Get()
 	defer db.Close()
 

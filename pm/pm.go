@@ -369,7 +369,6 @@ func (pm *PM) msgCallback(cmd *core.Command, msg *stream.Message) {
 
 func (pm *PM) resultCallback(cmd *core.Command, result *core.JobResult) {
 	result.Tags = cmd.Tags
-	result.Arguments = cmd.Arguments
 	//NOTE: we always force the real gid and nid on the result.
 	result.Gid = settings.Options.Gid()
 	result.Nid = settings.Options.Nid()

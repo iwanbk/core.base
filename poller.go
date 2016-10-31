@@ -18,10 +18,10 @@ type Sink interface {
 type redisSink struct {
 	key        string
 	mgr        *pm.PM
-	controller *settings.ControllerClient
+	controller *settings.SinkClient
 }
 
-func getKeys(m map[string]*settings.ControllerClient) []string {
+func getKeys(m map[string]*settings.SinkClient) []string {
 	keys := make([]string, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)
@@ -30,7 +30,7 @@ func getKeys(m map[string]*settings.ControllerClient) []string {
 	return keys
 }
 
-func NewSink(key string, mgr *pm.PM, controller *settings.ControllerClient) Sink {
+func NewSink(key string, mgr *pm.PM, controller *settings.SinkClient) Sink {
 	poll := &redisSink{
 		key:        key,
 		mgr:        mgr,
@@ -69,7 +69,7 @@ func (poll *redisSink) run() {
 		command.Gid = settings.Options.Gid()
 		command.Nid = settings.Options.Nid()
 
-		log.Infof("Starting command %s", command)
+		log.Infof("Starting command %s", &command)
 
 		if command.Queue == "" {
 			poll.mgr.PushCmd(&command)
@@ -86,7 +86,7 @@ func (poll *redisSink) Run() {
 /*
 StartSinks starts the long polling routines and feed the manager with received commands
 */
-func StartSinks(mgr *pm.PM, controllers map[string]*settings.ControllerClient) {
+func StartSinks(mgr *pm.PM, controllers map[string]*settings.SinkClient) {
 	var keys []string
 	if len(settings.Settings.Channel.Cmds) > 0 {
 		keys = settings.Settings.Channel.Cmds
