@@ -96,10 +96,6 @@ type AppSettings struct {
 	Channel struct {
 		Cmds []string
 	}
-
-	Hubble struct {
-		Controllers []string
-	}
 }
 
 var Settings AppSettings

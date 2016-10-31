@@ -43,8 +43,6 @@ type StatsFlushHandler func(stats *stats.Stats)
 
 //PM is the main process manager.
 type PM struct {
-	mid      uint32
-	midfile  string
 	midMux   sync.Mutex
 	cmds     chan *core.Command
 	runners  map[string]Runner
@@ -52,10 +50,11 @@ type PM struct {
 	maxJobs  int
 	jobsCond *sync.Cond
 
-	msgHandlers        []MessageHandler
-	resultHandlers     []ResultHandler
-	statsFlushHandlers []StatsFlushHandler
-	queueMgr           *cmdQueueManager
+	msgHandlers         []MessageHandler
+	resultHandlers      []ResultHandler
+	routeResultHandlers map[core.Route][]ResultHandler
+	statsFlushHandlers  []StatsFlushHandler
+	queueMgr            *cmdQueueManager
 
 	pids    map[int]chan *syscall.WaitStatus
 	pidsMux sync.Mutex
@@ -64,19 +63,18 @@ type PM struct {
 var pm *PM
 
 //NewPM creates a new PM
-func InitProcessManager(midfile string, maxJobs int) *PM {
+func InitProcessManager(maxJobs int) *PM {
 	pm = &PM{
 		cmds:     make(chan *core.Command),
-		midfile:  midfile,
-		mid:      loadMid(midfile),
 		runners:  make(map[string]Runner),
 		maxJobs:  maxJobs,
 		jobsCond: sync.NewCond(&sync.Mutex{}),
 
-		msgHandlers:        make([]MessageHandler, 0, 3),
-		resultHandlers:     make([]ResultHandler, 0, 3),
-		statsFlushHandlers: make([]StatsFlushHandler, 0, 3),
-		queueMgr:           newCmdQueueManager(),
+		msgHandlers:         make([]MessageHandler, 0, 3),
+		resultHandlers:      make([]ResultHandler, 0, 3),
+		routeResultHandlers: make(map[core.Route][]ResultHandler),
+		statsFlushHandlers:  make([]StatsFlushHandler, 0, 3),
+		queueMgr:            newCmdQueueManager(),
 
 		pids: make(map[int]chan *syscall.WaitStatus),
 	}
@@ -127,14 +125,6 @@ func (pm *PM) PushCmdToQueue(cmd *core.Command) {
 	pm.queueMgr.Push(cmd)
 }
 
-func (pm *PM) getNextMsgID() uint32 {
-	pm.midMux.Lock()
-	defer pm.midMux.Unlock()
-	pm.mid++
-	saveMid(pm.midfile, pm.mid)
-	return pm.mid
-}
-
 //AddMessageHandler adds handlers for messages that are captured from sub processes. Logger can use this to
 //process messages
 func (pm *PM) AddMessageHandler(handler MessageHandler) {
@@ -144,6 +134,10 @@ func (pm *PM) AddMessageHandler(handler MessageHandler) {
 //AddResultHandler adds a handler that receives job results.
 func (pm *PM) AddResultHandler(handler ResultHandler) {
 	pm.resultHandlers = append(pm.resultHandlers, handler)
+}
+
+func (pm *PM) AddRouteResultHandler(route core.Route, handler ResultHandler) {
+	pm.routeResultHandlers[route] = append(pm.routeResultHandlers[route], handler)
 }
 
 //AddStatsFlushHandler adds handler to stats flush.
@@ -368,8 +362,6 @@ func (pm *PM) msgCallback(cmd *core.Command, msg *stream.Message) {
 
 	//stamp msg.
 	msg.Epoch = time.Now().UnixNano()
-	//add ID
-	msg.ID = pm.getNextMsgID()
 	for _, handler := range pm.msgHandlers {
 		handler(cmd, msg)
 	}
@@ -378,8 +370,15 @@ func (pm *PM) msgCallback(cmd *core.Command, msg *stream.Message) {
 func (pm *PM) resultCallback(cmd *core.Command, result *core.JobResult) {
 	result.Tags = cmd.Tags
 	result.Arguments = cmd.Arguments
+	//NOTE: we always force the real gid and nid on the result.
+	result.Gid = settings.Options.Gid()
+	result.Nid = settings.Options.Nid()
 
 	for _, handler := range pm.resultHandlers {
+		handler(cmd, result)
+	}
+
+	for _, handler := range pm.routeResultHandlers[cmd.Route] {
 		handler(cmd, result)
 	}
 }

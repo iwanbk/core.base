@@ -70,7 +70,6 @@ var (
 
 //Message is a message from running process
 type Message struct {
-	ID      uint32
 	Level   int
 	Message string
 	Epoch   int64
@@ -84,7 +83,6 @@ func (msg *Message) MarshalJSON() ([]byte, error) {
 	data := make(map[string]interface{})
 	data["epoch"] = msg.Epoch / int64(time.Millisecond)
 	data["level"] = msg.Level
-	data["id"] = msg.ID
 	data["data"] = msg.Message
 
 	return json.Marshal(data)

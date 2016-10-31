@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+const (
+	ReturnExpire = 300
+)
+
 /*
 ControllerClient represents an active agent controller connection.
 */
@@ -61,4 +65,25 @@ func (cl *ControllerClient) GetNext(command *core.Command) error {
 	}
 
 	return json.Unmarshal(payload, command)
+}
+
+func (cl *ControllerClient) Respond(result *core.JobResult) error {
+	db := cl.Redis.Get()
+	defer db.Close()
+
+	queue := fmt.Sprintf("cmd:%s", result.ID)
+
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+
+	if _, err := db.Do("RPUSH", queue, payload); err != nil {
+		return err
+	}
+	if _, err := db.Do("EXPIRE", queue, ReturnExpire); err != nil {
+		return err
+	}
+
+	return nil
 }

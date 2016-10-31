@@ -4,7 +4,6 @@ import (
 	"github.com/g8os/core.base/pm"
 	"github.com/g8os/core.base/pm/core"
 	"github.com/g8os/core.base/settings"
-	"net/url"
 	"time"
 )
 
@@ -12,8 +11,13 @@ const (
 	ReconnectSleepTime = 10 * time.Second
 )
 
-type poller struct {
+type Sink interface {
+	Run()
+}
+
+type redisSink struct {
 	key        string
+	mgr        *pm.PM
 	controller *settings.ControllerClient
 }
 
@@ -26,23 +30,26 @@ func getKeys(m map[string]*settings.ControllerClient) []string {
 	return keys
 }
 
-func newPoller(key string, controller *settings.ControllerClient) *poller {
-	poll := &poller{
+func NewSink(key string, mgr *pm.PM, controller *settings.ControllerClient) Sink {
+	poll := &redisSink{
 		key:        key,
+		mgr:        mgr,
 		controller: controller,
 	}
 
 	return poll
 }
 
-func (poll *poller) longPoll() {
+func (poll *redisSink) handler(cmd *core.Command, result *core.JobResult) {
+	if err := poll.controller.Respond(result); err != nil {
+		log.Errorf("Failed to respond to command %s: %s", cmd, err)
+	}
+}
+
+func (poll *redisSink) run() {
 	lastError := time.Now()
 
-	pollQuery := make(url.Values)
-
-	for _, role := range settings.Options.Roles() {
-		pollQuery.Add("role", role)
-	}
+	poll.mgr.AddRouteResultHandler(core.Route(poll.key), poll.handler)
 
 	for {
 		var command core.Command
@@ -57,10 +64,7 @@ func (poll *poller) longPoll() {
 			continue
 		}
 
-		//tag command for routing.
-		//ctrlConfig := controller.Config
-		//cmd.Args.SetTag(poll.key)
-		//cmd.Args.SetController(ctrlConfig)
+		command.Route = core.Route(poll.key)
 
 		command.Gid = settings.Options.Gid()
 		command.Nid = settings.Options.Nid()
@@ -68,17 +72,21 @@ func (poll *poller) longPoll() {
 		log.Infof("Starting command %s", command)
 
 		if command.Queue == "" {
-			pm.GetManager().PushCmd(&command)
+			poll.mgr.PushCmd(&command)
 		} else {
-			pm.GetManager().PushCmdToQueue(&command)
+			poll.mgr.PushCmdToQueue(&command)
 		}
 	}
 }
 
+func (poll *redisSink) Run() {
+	go poll.run()
+}
+
 /*
-StartPollers starts the long polling routines and feed the manager with received commands
+StartSinks starts the long polling routines and feed the manager with received commands
 */
-func StartPollers(controllers map[string]*settings.ControllerClient) {
+func StartSinks(mgr *pm.PM, controllers map[string]*settings.ControllerClient) {
 	var keys []string
 	if len(settings.Settings.Channel.Cmds) > 0 {
 		keys = settings.Settings.Channel.Cmds
@@ -92,7 +100,7 @@ func StartPollers(controllers map[string]*settings.ControllerClient) {
 			log.Fatalf("No contoller with name '%s'", key)
 		}
 
-		poll := newPoller(key, controller)
-		go poll.longPoll()
+		poll := NewSink(key, mgr, controller)
+		poll.Run()
 	}
 }

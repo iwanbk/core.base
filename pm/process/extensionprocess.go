@@ -29,14 +29,12 @@ func NewExtensionProcessFactory(exe string, dir string, args []string, env map[s
 			sysargs.Args = append(sysargs.Args, utils.Format(arg, input))
 		}
 
-		payload, _ := json.Marshal(sysargs)
-
 		extcmd := &core.Command{
 			ID:        cmd.ID,
 			Gid:       cmd.Gid,
 			Nid:       cmd.Nid,
 			Command:   CommandSystem,
-			Arguments: json.RawMessage(payload),
+			Arguments: core.MustArguments(sysargs),
 			Tags:      cmd.Tags,
 		}
 
