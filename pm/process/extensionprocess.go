@@ -13,17 +13,31 @@ type extensionProcess struct {
 }
 
 func NewExtensionProcessFactory(exe string, dir string, args []string, env map[string]string) ProcessFactory {
-
 	constructor := func(table PIDTable, cmd *core.Command) Process {
 		sysargs := SystemCommandArguments{
 			Name: exe,
 			Dir:  dir,
-			Args: args,
 			Env:  env,
 		}
 
 		var input map[string]interface{}
-		json.Unmarshal(cmd.Arguments, input)
+		if err := json.Unmarshal(cmd.Arguments, &input); err != nil {
+			log.Errorf("Failed to load extension command arguments: %s", err)
+		}
+		log.Debugf("rececived arguments for extension are: %v", input)
+
+		if stdin, ok := input["stdin"]; ok {
+			switch in := stdin.(type) {
+			case string:
+				sysargs.StdIn = []byte(in)
+			case []byte:
+				sysargs.StdIn = in
+			default:
+				log.Errorf("invalid stdin to extesion command, expecting string, or bytes")
+			}
+
+			delete(input, "stdin")
+		}
 
 		for _, arg := range args {
 			sysargs.Args = append(sysargs.Args, utils.Format(arg, input))

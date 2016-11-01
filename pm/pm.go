@@ -1,7 +1,6 @@
 package pm
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/g8os/core.base/pm/core"
@@ -145,7 +144,7 @@ func (pm *PM) AddStatsFlushHandler(handler StatsFlushHandler) {
 	pm.statsFlushHandlers = append(pm.statsFlushHandlers, handler)
 }
 
-func (pm *PM) GetRunner(cmd *core.Command, hooksOnExit bool, hooks ...RunnerHook) (Runner, error) {
+func (pm *PM) GetRunner(cmd *core.Command, hooksDelay int, hooks ...RunnerHook) (Runner, error) {
 	factory := GetProcessFactory(cmd)
 	//process := NewProcess(cmd)
 
@@ -158,14 +157,14 @@ func (pm *PM) GetRunner(cmd *core.Command, hooksOnExit bool, hooks ...RunnerHook
 		return nil, DuplicateIDErr
 	}
 
-	runner := NewRunner(pm, cmd, factory, hooksOnExit, hooks...)
+	runner := NewRunner(pm, cmd, factory, hooksDelay, hooks...)
 	pm.runners[cmd.ID] = runner
 
 	return runner, nil
 }
 
-func (pm *PM) RunCmd(cmd *core.Command, hooksOnExit bool, hooks ...RunnerHook) Runner {
-	runner, err := pm.GetRunner(cmd, hooksOnExit, hooks...)
+func (pm *PM) RunCmd(cmd *core.Command, hooksDelay int, hooks ...RunnerHook) Runner {
+	runner, err := pm.GetRunner(cmd, hooksDelay, hooks...)
 	if err == UnknownCommandErr {
 		log.Errorf("Unknow command '%s'", cmd.Command)
 		errResult := core.NewBasicJobResult(cmd)
@@ -211,7 +210,7 @@ func (pm *PM) processCmds() {
 		case cmd = <-pm.queueMgr.Producer():
 		}
 
-		pm.RunCmd(cmd, false)
+		pm.RunCmd(cmd, -1)
 	}
 }
 
@@ -284,14 +283,12 @@ func (pm *PM) RunSlice(slice settings.StartupSlice) {
 			startup.Args = make(map[string]interface{})
 		}
 
-		args, _ := json.Marshal(startup.Args)
-
 		cmd := &core.Command{
 			Gid:       settings.Options.Gid(),
 			Nid:       settings.Options.Nid(),
 			ID:        startup.Key(),
 			Command:   startup.Name,
-			Arguments: json.RawMessage(args),
+			Arguments: core.MustArguments(startup.Args),
 		}
 
 		all = append(all, cmd.ID)
@@ -307,7 +304,7 @@ func (pm *PM) RunSlice(slice settings.StartupSlice) {
 
 			if canRun {
 				log.Infof("Starting %s", c)
-				pm.RunCmd(c, up.MustExit, func(s bool) {
+				pm.RunCmd(c, up.RunningDelay, func(s bool) {
 					state.Release(c.ID, s)
 				})
 			} else {

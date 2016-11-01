@@ -73,7 +73,7 @@ func (l *Local) server(con net.Conn) {
 		return
 	}
 
-	runner, err := pm.GetManager().GetRunner(cmd, false)
+	runner, err := pm.GetManager().GetRunner(cmd, -1)
 	if err != nil {
 		lresult.Error = fmt.Sprintf("Failed to get job runner for command(%s): %s", cmd.Command, err)
 		return

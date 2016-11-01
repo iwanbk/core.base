@@ -60,21 +60,21 @@ type Runner interface {
 }
 
 type runnerImpl struct {
-	manager *PM
-	command *core.Command
-	factory process.ProcessFactory
-	kill    chan int
+	manager    *PM
+	command    *core.Command
+	factory    process.ProcessFactory
+	kill       chan int
 
-	process process.Process
-	statsd  *stats.Statsd
+	process    process.Process
+	statsd     *stats.Statsd
 
-	hooks       []RunnerHook
-	hooksOnExit bool
-	hookOnce    sync.Once
+	hooks      []RunnerHook
+	hooksDelay int
+	hookOnce   sync.Once
 
-	waitOnce sync.Once
-	result   *core.JobResult
-	wg       sync.WaitGroup
+	waitOnce   sync.Once
+	result     *core.JobResult
+	wg         sync.WaitGroup
 }
 
 /*
@@ -83,11 +83,18 @@ NewRunner creates a new runner object that is bind to this PM instance.
 :manager: Bind this runner to this PM instance
 :command: Command to run
 :factory: Process factory associated with command type.
+:hooksDelay: Fire the hooks after this delay in seconds if the process is still running. Basically it's a delay for if the
+            command didn't exit by then we assume it's running successfully
+            values are:
+            	- 1 means hooks are only called when the command exits
+            	0   means use default delay (default is 2 seconds)
+            	> 0 Use that delay
+
 :hooks: Optionals hooks that are called if the process is considered RUNNING successfully.
         The process is considered running, if it ran with no errors for 2 seconds, or exited before the 2 seconds passes
         with SUCCESS exit code.
 */
-func NewRunner(manager *PM, command *core.Command, factory process.ProcessFactory, hooksOnExit bool, hooks ...RunnerHook) Runner {
+func NewRunner(manager *PM, command *core.Command, factory process.ProcessFactory, hooksDelay int, hooks ...RunnerHook) Runner {
 	statsInterval := command.StatsInterval
 
 	if statsInterval < 30 {
@@ -102,7 +109,7 @@ func NewRunner(manager *PM, command *core.Command, factory process.ProcessFactor
 		factory:     factory,
 		kill:        make(chan int),
 		hooks:       hooks,
-		hooksOnExit: hooksOnExit,
+		hooksDelay:  hooksDelay,
 
 		statsd: stats.NewStatsd(
 			prefix,
@@ -174,7 +181,12 @@ func (runner *runnerImpl) run() *core.JobResult {
 
 	timeout := runner.timeout()
 	meter := time.After(meterPeriod)
-	runTimer := time.After(2 * time.Second)
+	var runTimer <-chan time.Time
+	if runner.hooksDelay == 0 {
+		runTimer = time.After(2 * time.Second)
+	} else if runner.hooksDelay > 0 {
+		runTimer = time.After(time.Duration(runner.hooksDelay) * time.Second)
+	}
 loop:
 	for {
 		select {
@@ -190,10 +202,7 @@ loop:
 			runner.meter()
 			meter = time.After(meterPeriod)
 		case <-runTimer:
-			//if process is still running after the timer has passed, we consider it running
-			if !runner.hooksOnExit {
-				runner.callHooks(true)
-			}
+			runner.callHooks(true)
 		case message := <-channel:
 			if utils.In(stream.ResultMessageLevels, message.Level) {
 				result = message

@@ -15,7 +15,7 @@ type SystemCommandArguments struct {
 	Dir   string            `json:"dir"`
 	Args  []string          `json:"args"`
 	Env   map[string]string `json:"env"`
-	StdIn []byte            `json:"data"`
+	StdIn []byte            `json:"stdin"`
 }
 
 type systemProcessImpl struct {
@@ -30,6 +30,7 @@ type systemProcessImpl struct {
 
 func NewSystemProcess(table PIDTable, cmd *core.Command) Process {
 	process := &systemProcessImpl{
+		cmd: cmd,
 		children: make([]*psutils.Process, 0),
 		table:    table,
 	}

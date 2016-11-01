@@ -7,13 +7,12 @@ import (
 
 //StartupCmd startup command config
 type Startup struct {
-	After    []string
-	MustExit bool
-	Name     string
-	Data     string
-	Args     map[string]interface{}
+	After        []string
+	RunningDelay int
+	Name         string
+	Args         map[string]interface{}
 
-	key string
+	key          string
 }
 
 func (s Startup) String() string {
