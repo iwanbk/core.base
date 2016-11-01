@@ -144,14 +144,7 @@ func (pm *PM) AddStatsFlushHandler(handler StatsFlushHandler) {
 	pm.statsFlushHandlers = append(pm.statsFlushHandlers, handler)
 }
 
-func (pm *PM) GetRunner(cmd *core.Command, hooksDelay int, hooks ...RunnerHook) (Runner, error) {
-	factory := GetProcessFactory(cmd)
-	//process := NewProcess(cmd)
-
-	if factory == nil {
-		return nil, UnknownCommandErr
-	}
-
+func (pm *PM) NewRunner(cmd *core.Command, factory process.ProcessFactory, hooksDelay int, hooks ...RunnerHook) (Runner, error) {
 	_, exists := pm.runners[cmd.ID]
 	if exists {
 		return nil, DuplicateIDErr
@@ -163,32 +156,36 @@ func (pm *PM) GetRunner(cmd *core.Command, hooksDelay int, hooks ...RunnerHook) 
 	return runner, nil
 }
 
-func (pm *PM) RunCmd(cmd *core.Command, hooksDelay int, hooks ...RunnerHook) Runner {
-	runner, err := pm.GetRunner(cmd, hooksDelay, hooks...)
-	if err == UnknownCommandErr {
+func (pm *PM) RunCmd(cmd *core.Command, hooksDelay int, hooks ...RunnerHook) (Runner, error) {
+	factory := GetProcessFactory(cmd)
+	if factory == nil {
 		log.Errorf("Unknow command '%s'", cmd.Command)
 		errResult := core.NewBasicJobResult(cmd)
 		errResult.State = core.StateUnknownCmd
 		pm.resultCallback(cmd, errResult)
-		return nil
-	} else if err == DuplicateIDErr {
+		return nil, UnknownCommandErr
+	}
+
+	runner, err := pm.NewRunner(cmd, factory, hooksDelay, hooks...)
+
+	if err == DuplicateIDErr {
 		log.Errorf("Duplicate job id '%s'", cmd.ID)
 		errResult := core.NewBasicJobResult(cmd)
 		errResult.State = core.StateDuplicateID
 		errResult.Data = err.Error()
 		pm.resultCallback(cmd, errResult)
-		return nil
+		return nil, err
 	} else if err != nil {
 		errResult := core.NewBasicJobResult(cmd)
 		errResult.State = core.StateError
 		errResult.Data = err.Error()
 		pm.resultCallback(cmd, errResult)
-		return nil
+		return nil, err
 	}
 
 	go runner.Run()
 
-	return runner
+	return runner, nil
 }
 
 func (pm *PM) processCmds() {

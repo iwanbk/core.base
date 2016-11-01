@@ -7,7 +7,6 @@ import (
 	"github.com/g8os/core.base/pm/stream"
 	psutils "github.com/shirou/gopsutil/process"
 	"os/exec"
-	"path"
 )
 
 type SystemCommandArguments struct {
@@ -108,18 +107,6 @@ func (process *systemProcessImpl) GetStats() *ProcessStats {
 	return &stats
 }
 
-func joinCertPath(base string, relative string) string {
-	if relative == "" {
-		return relative
-	}
-
-	if path.IsAbs(relative) {
-		return relative
-	}
-
-	return path.Join(base, relative)
-}
-
 //func (process *systemProcessImpl) getExtraEnv() []string {
 //	env := make([]string, 0, 10)
 //	agentHome, _ := os.Getwd()
@@ -177,8 +164,6 @@ func (process *systemProcessImpl) Run() (<-chan *stream.Message, error) {
 	cmd := exec.Command(process.args.Name,
 		process.args.Args...)
 	cmd.Dir = process.args.Dir
-	//
-	//extraEnv := process.getExtraEnv()
 
 	for k, v := range process.args.Env {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%v=%v", k, v))
