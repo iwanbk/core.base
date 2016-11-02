@@ -21,7 +21,7 @@ func NewExtensionProcessFactory(exe string, dir string, args []string, env map[s
 		}
 
 		var input map[string]interface{}
-		if err := json.Unmarshal(cmd.Arguments, &input); err != nil {
+		if err := json.Unmarshal(*cmd.Arguments, &input); err != nil {
 			log.Errorf("Failed to load extension command arguments: %s", err)
 		}
 		log.Debugf("rececived arguments for extension are: %v", input)

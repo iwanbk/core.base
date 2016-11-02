@@ -33,7 +33,7 @@ func NewContainerProcess(table PIDTable, cmd *core.Command) Process {
 		table: table,
 	}
 
-	json.Unmarshal(cmd.Arguments, &process.args)
+	json.Unmarshal(*cmd.Arguments, &process.args)
 	return process
 }
 

@@ -22,7 +22,7 @@ type killData struct {
 func kill(cmd *core.Command) (interface{}, error) {
 	//load data
 	data := killData{}
-	err := json.Unmarshal(cmd.Arguments, &data)
+	err := json.Unmarshal(*cmd.Arguments, &data)
 
 	if err != nil {
 		return nil, err

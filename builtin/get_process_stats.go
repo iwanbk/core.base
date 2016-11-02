@@ -23,7 +23,7 @@ type getProcessStatsData struct {
 func getProcessStats(cmd *core.Command) (interface{}, error) {
 	//load data
 	data := getProcessStatsData{}
-	err := json.Unmarshal(cmd.Arguments, &data)
+	err := json.Unmarshal(*cmd.Arguments, &data)
 	if err != nil {
 		return nil, err
 	}

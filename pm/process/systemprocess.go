@@ -29,12 +29,12 @@ type systemProcessImpl struct {
 
 func NewSystemProcess(table PIDTable, cmd *core.Command) Process {
 	process := &systemProcessImpl{
-		cmd: cmd,
+		cmd:      cmd,
 		children: make([]*psutils.Process, 0),
 		table:    table,
 	}
 
-	json.Unmarshal(cmd.Arguments, &process.args)
+	json.Unmarshal(*cmd.Arguments, &process.args)
 	return process
 }
 
