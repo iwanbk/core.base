@@ -47,6 +47,7 @@ func (c *SinkConfig) GetClient(id string) (*SinkClient, error) {
 	pool := utils.NewRedisPool(network, address, c.Password)
 
 	client := &SinkClient{
+		ID:    id,
 		URL:   strings.TrimRight(c.URL, "/"),
 		Redis: pool,
 	}
