@@ -42,9 +42,12 @@ type StatsFlushHandler func(stats *stats.Stats)
 
 //PM is the main process manager.
 type PM struct {
-	midMux   sync.Mutex
-	cmds     chan *core.Command
-	runners  map[string]Runner
+	midMux  sync.Mutex
+	cmds    chan *core.Command
+	runners map[string]Runner
+
+	runnersMux sync.Mutex
+
 	statsdes map[string]*stats.Statsd
 	maxJobs  int
 	jobsCond *sync.Cond
@@ -145,6 +148,9 @@ func (pm *PM) AddStatsFlushHandler(handler StatsFlushHandler) {
 }
 
 func (pm *PM) NewRunner(cmd *core.Command, factory process.ProcessFactory, hooksDelay int, hooks ...RunnerHook) (Runner, error) {
+	pm.runnersMux.Lock()
+	defer pm.runnersMux.Unlock()
+
 	_, exists := pm.runners[cmd.ID]
 	if exists {
 		return nil, DuplicateIDErr
@@ -152,6 +158,8 @@ func (pm *PM) NewRunner(cmd *core.Command, factory process.ProcessFactory, hooks
 
 	runner := NewRunner(pm, cmd, factory, hooksDelay, hooks...)
 	pm.runners[cmd.ID] = runner
+
+	go runner.Run()
 
 	return runner, nil
 }
@@ -182,8 +190,6 @@ func (pm *PM) RunCmd(cmd *core.Command, hooksDelay int, hooks ...RunnerHook) (Ru
 		pm.resultCallback(cmd, errResult)
 		return nil, err
 	}
-
-	go runner.Run()
 
 	return runner, nil
 }
@@ -281,8 +287,6 @@ func (pm *PM) RunSlice(slice settings.StartupSlice) {
 		}
 
 		cmd := &core.Command{
-			Gid:       settings.Options.Gid(),
-			Nid:       settings.Options.Nid(),
 			ID:        startup.Key(),
 			Command:   startup.Name,
 			Arguments: core.MustArguments(startup.Args),
@@ -322,7 +326,9 @@ func (pm *PM) RunSlice(slice settings.StartupSlice) {
 }
 
 func (pm *PM) cleanUp(runner Runner) {
+	pm.runnersMux.Lock()
 	delete(pm.runners, runner.Command().ID)
+	pm.runnersMux.Unlock()
 
 	pm.queueMgr.Notify(runner.Command())
 	pm.jobsCond.Broadcast()
@@ -335,6 +341,9 @@ func (pm *PM) Runners() map[string]Runner {
 
 //Killall kills all running processes.
 func (pm *PM) Killall() {
+	pm.runnersMux.Lock()
+	defer pm.runnersMux.Unlock()
+
 	for _, v := range pm.runners {
 		v.Kill()
 	}
@@ -364,8 +373,6 @@ func (pm *PM) msgCallback(cmd *core.Command, msg *stream.Message) {
 func (pm *PM) resultCallback(cmd *core.Command, result *core.JobResult) {
 	result.Tags = cmd.Tags
 	//NOTE: we always force the real gid and nid on the result.
-	result.Gid = settings.Options.Gid()
-	result.Nid = settings.Options.Nid()
 
 	for _, handler := range pm.resultHandlers {
 		handler(cmd, result)

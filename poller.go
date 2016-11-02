@@ -16,9 +16,9 @@ type Sink interface {
 }
 
 type redisSink struct {
-	key        string
-	mgr        *pm.PM
-	controller *settings.SinkClient
+	key    string
+	mgr    *pm.PM
+	client *settings.SinkClient
 }
 
 func getKeys(m map[string]*settings.SinkClient) []string {
@@ -30,18 +30,18 @@ func getKeys(m map[string]*settings.SinkClient) []string {
 	return keys
 }
 
-func NewSink(key string, mgr *pm.PM, controller *settings.SinkClient) Sink {
+func NewSink(key string, mgr *pm.PM, client *settings.SinkClient) Sink {
 	poll := &redisSink{
-		key:        key,
-		mgr:        mgr,
-		controller: controller,
+		key:    key,
+		mgr:    mgr,
+		client: client,
 	}
 
 	return poll
 }
 
 func (poll *redisSink) handler(cmd *core.Command, result *core.JobResult) {
-	if err := poll.controller.Respond(result); err != nil {
+	if err := poll.client.Respond(result); err != nil {
 		log.Errorf("Failed to respond to command %s: %s", cmd, err)
 	}
 }
@@ -53,9 +53,9 @@ func (poll *redisSink) run() {
 
 	for {
 		var command core.Command
-		err := poll.controller.GetNext(&command)
+		err := poll.client.GetNext(&command)
 		if err != nil {
-			log.Errorf("Failed to get next command from %s: %s", poll.controller.URL, err)
+			log.Errorf("Failed to get next command from %s: %s", poll.client.URL, err)
 			if time.Now().Sub(lastError) < ReconnectSleepTime {
 				time.Sleep(ReconnectSleepTime)
 			}
@@ -65,9 +65,6 @@ func (poll *redisSink) run() {
 		}
 
 		command.Route = core.Route(poll.key)
-
-		command.Gid = settings.Options.Gid()
-		command.Nid = settings.Options.Nid()
 
 		log.Infof("Starting command %s", &command)
 

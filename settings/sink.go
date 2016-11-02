@@ -20,25 +20,31 @@ ControllerClient represents an active agent controller connection.
 type SinkClient struct {
 	URL   string
 	Redis *redis.Pool
+	ID    string
 }
 
 /*
-NewControllerClient gets a new agent controller connection
+GetClient gets a new sink connection with the given identity. Identity is used by the sink client to
+introduce itself to the sink terminal.
 */
-func (c *SinkConfig) GetClient() (*SinkClient, error) {
+func (c *SinkConfig) GetClient(id string) (*SinkClient, error) {
 	u, err := url.Parse(c.URL)
 	if err != nil {
 		return nil, err
 	}
 
 	if u.Scheme != "redis" {
-		return nil, fmt.Errorf("expected url of format redis://<host>:<port>")
+		return nil, fmt.Errorf("expected url of format redis://<host>:<port> or redis:///unix.socket")
 	}
 
-	pool := utils.NewRedisPool(u.Host, c.Password)
-	//if _, err := pool.Get().Do("PING"); err != nil {
-	//	return nil, err
-	//}
+	network := "tcp"
+	address := u.Host
+	if address == "" {
+		network = "unix"
+		address = u.Path
+	}
+
+	pool := utils.NewRedisPool(network, address, c.Password)
 
 	client := &SinkClient{
 		URL:   strings.TrimRight(c.URL, "/"),
@@ -49,9 +55,8 @@ func (c *SinkConfig) GetClient() (*SinkClient, error) {
 }
 
 func (client *SinkClient) DefaultQueue() string {
-	return fmt.Sprintf("core:default:%v:%v",
-		Options.Gid(),
-		Options.Nid(),
+	return fmt.Sprintf("core:default:%v",
+		client.ID,
 	)
 }
 

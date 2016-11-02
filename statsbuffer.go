@@ -27,7 +27,7 @@ type redisStatsBuffer struct {
 }
 
 func NewRedisStatsBuffer(address string, password string, capacity int, flushInt time.Duration) StatsFlusher {
-	pool := utils.NewRedisPool(address, password)
+	pool := utils.NewRedisPool("tcp", address, password)
 
 	redisBuffer := &redisStatsBuffer{
 		pool: pool,

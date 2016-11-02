@@ -60,21 +60,21 @@ type Runner interface {
 }
 
 type runnerImpl struct {
-	manager    *PM
-	command    *core.Command
-	factory    process.ProcessFactory
-	kill       chan int
+	manager *PM
+	command *core.Command
+	factory process.ProcessFactory
+	kill    chan int
 
-	process    process.Process
-	statsd     *stats.Statsd
+	process process.Process
+	statsd  *stats.Statsd
 
 	hooks      []RunnerHook
 	hooksDelay int
 	hookOnce   sync.Once
 
-	waitOnce   sync.Once
-	result     *core.JobResult
-	wg         sync.WaitGroup
+	waitOnce sync.Once
+	result   *core.JobResult
+	wg       sync.WaitGroup
 }
 
 /*
@@ -101,18 +101,16 @@ func NewRunner(manager *PM, command *core.Command, factory process.ProcessFactor
 		statsInterval = 30
 	}
 
-	prefix := fmt.Sprintf("%d.%d.%s", command.Gid, command.Nid, command.ID)
-
 	runner := &runnerImpl{
-		manager:     manager,
-		command:     command,
-		factory:     factory,
-		kill:        make(chan int),
-		hooks:       hooks,
-		hooksDelay:  hooksDelay,
+		manager:    manager,
+		command:    command,
+		factory:    factory,
+		kill:       make(chan int),
+		hooks:      hooks,
+		hooksDelay: hooksDelay,
 
 		statsd: stats.NewStatsd(
-			prefix,
+			command.ID,
 			time.Duration(statsInterval)*time.Second,
 			manager.statsFlushCallback),
 	}

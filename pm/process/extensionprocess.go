@@ -45,8 +45,6 @@ func NewExtensionProcessFactory(exe string, dir string, args []string, env map[s
 
 		extcmd := &core.Command{
 			ID:        cmd.ID,
-			Gid:       cmd.Gid,
-			Nid:       cmd.Nid,
 			Command:   CommandSystem,
 			Arguments: core.MustArguments(sysargs),
 			Tags:      cmd.Tags,
