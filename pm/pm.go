@@ -322,6 +322,7 @@ func (pm *PM) RunSlice(slice settings.StartupSlice) {
 	}
 
 	//wait for the full slice to run
+	log.Infof("Waiting for the slice to boot")
 	state.Wait(all...)
 }
 

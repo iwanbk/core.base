@@ -3,12 +3,17 @@ package utils
 import (
 	"fmt"
 	"github.com/naoina/toml"
+	"github.com/op/go-logging"
 	"io/ioutil"
 	"os"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+)
+
+var (
+	log = logging.MustGetLogger("utils")
 )
 
 var validLevels = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 20, 21, 22, 23, 30}

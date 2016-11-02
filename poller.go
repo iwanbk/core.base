@@ -83,16 +83,16 @@ func (poll *redisSink) Run() {
 /*
 StartSinks starts the long polling routines and feed the manager with received commands
 */
-func StartSinks(mgr *pm.PM, controllers map[string]*settings.SinkClient) {
+func StartSinks(mgr *pm.PM, sinks map[string]*settings.SinkClient) {
 	var keys []string
 	if len(settings.Settings.Channel.Cmds) > 0 {
 		keys = settings.Settings.Channel.Cmds
 	} else {
-		keys = getKeys(controllers)
+		keys = getKeys(sinks)
 	}
 
 	for _, key := range keys {
-		controller, ok := controllers[key]
+		controller, ok := sinks[key]
 		if !ok {
 			log.Fatalf("No contoller with name '%s'", key)
 		}
