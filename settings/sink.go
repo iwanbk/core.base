@@ -81,7 +81,7 @@ func (cl *SinkClient) Respond(result *core.JobResult) error {
 	db := cl.Redis.Get()
 	defer db.Close()
 
-	queue := fmt.Sprintf("cmd:%s", result.ID)
+	queue := fmt.Sprintf("result:%s", result.ID)
 
 	payload, err := json.Marshal(result)
 	if err != nil {
