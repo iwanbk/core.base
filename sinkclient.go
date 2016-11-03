@@ -19,16 +19,18 @@ const (
 ControllerClient represents an active agent controller connection.
 */
 type sinkClient struct {
-	URL   string
-	Redis *redis.Pool
-	ID    string
+	url   string
+	redis *redis.Pool
+	id    string
+
+	responseQueue string
 }
 
 /*
 NewSinkClient gets a new sink connection with the given identity. Identity is used by the sink client to
 introduce itself to the sink terminal.
 */
-func NewSinkClient(cfg *settings.SinkConfig, id string) (SinkClient, error) {
+func NewSinkClient(cfg *settings.SinkConfig, id string, responseQueue ...string) (SinkClient, error) {
 	u, err := url.Parse(cfg.URL)
 	if err != nil {
 		return nil, err
@@ -48,26 +50,32 @@ func NewSinkClient(cfg *settings.SinkConfig, id string) (SinkClient, error) {
 	pool := utils.NewRedisPool(network, address, cfg.Password)
 
 	client := &sinkClient{
-		ID:    id,
-		URL:   strings.TrimRight(cfg.URL, "/"),
-		Redis: pool,
+		id:    id,
+		url:   strings.TrimRight(cfg.URL, "/"),
+		redis: pool,
+	}
+
+	if len(responseQueue) == 1 {
+		client.responseQueue = responseQueue[0]
+	} else if len(responseQueue) > 1 {
+		return nil, fmt.Errorf("only one response queue can be provided")
 	}
 
 	return client, nil
 }
 
 func (client *sinkClient) String() string {
-	return client.URL
+	return client.url
 }
 
 func (client *sinkClient) DefaultQueue() string {
 	return fmt.Sprintf("core:default:%v",
-		client.ID,
+		client.id,
 	)
 }
 
 func (cl *sinkClient) GetNext(command *core.Command) error {
-	db := cl.Redis.Get()
+	db := cl.redis.Get()
 	defer db.Close()
 
 	payload, err := redis.ByteSlices(db.Do("BLPOP", cl.DefaultQueue(), 0))
@@ -83,10 +91,15 @@ func (cl *sinkClient) Respond(result *core.JobResult) error {
 		return fmt.Errorf("result with no ID, not pushing results back...")
 	}
 
-	db := cl.Redis.Get()
+	db := cl.redis.Get()
 	defer db.Close()
 
-	queue := fmt.Sprintf("result:%s", result.ID)
+	var queue string
+	if cl.responseQueue != "" {
+		queue = cl.responseQueue
+	} else {
+		queue = fmt.Sprintf("result:%s", result.ID)
+	}
 
 	payload, err := json.Marshal(result)
 	if err != nil {
