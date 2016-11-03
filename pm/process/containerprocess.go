@@ -148,7 +148,7 @@ func (process *containerProcessImpl) Run() (<-chan *stream.Message, error) {
 
 		<-outConsumer.Signal()
 		<-errConsumer.Signal()
-		state := process.table.Wait(process.pid)
+		state := process.table.WaitPID(process.pid)
 
 		log.Infof("Process %s exited with state: %d", process.cmd, state.ExitStatus())
 

@@ -9,6 +9,7 @@ import (
 	"github.com/g8os/core.base/utils"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -111,7 +112,7 @@ func (runner *runnerImpl) meter() {
 }
 
 func (runner *runnerImpl) run() *core.JobResult {
-	runner.process = runner.factory(runner.manager, runner.command)
+	runner.process = runner.factory(runner, runner.command)
 
 	process := runner.process
 
@@ -289,4 +290,25 @@ func (runner *runnerImpl) Process() process.Process {
 func (runner *runnerImpl) Wait() *core.JobResult {
 	runner.wg.Wait()
 	return runner.result
+}
+
+//implement PIDTable
+//intercept pid registration to fire the correct hooks.
+func (runner *runnerImpl) Register(g process.GetPID) error {
+	return runner.manager.Register(func() (int, error) {
+		pid, err := g()
+		if err != nil {
+			return 0, err
+		}
+
+		for _, hook := range runner.hooks {
+			go hook.PID(pid)
+		}
+
+		return pid, err
+	})
+}
+
+func (runner *runnerImpl) WaitPID(pid int) *syscall.WaitStatus {
+	return runner.manager.WaitPID(pid)
 }

@@ -259,7 +259,7 @@ func (pm *PM) Register(g process.GetPID) error {
 	return nil
 }
 
-func (pm *PM) Wait(pid int) *syscall.WaitStatus {
+func (pm *PM) WaitPID(pid int) *syscall.WaitStatus {
 	return <-pm.pids[pid]
 }
 
@@ -320,14 +320,14 @@ func (pm *PM) RunSlice(slice settings.StartupSlice) {
 						},
 					}
 				} else {
-					hook = &ExitHook{
-						Action: func(s bool) {
-							state.Release(c.ID, s)
-						},
-					}
+					hook = &NOOPHook{}
 				}
 
-				pm.RunCmd(c, hook)
+				pm.RunCmd(c, hook, &ExitHook{
+					Action: func(s bool) {
+						state.Release(c.ID, s)
+					},
+				})
 			} else {
 				log.Errorf("Can't start %s because one of the dependencies failed", c)
 			}

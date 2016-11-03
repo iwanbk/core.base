@@ -11,6 +11,7 @@ type RunnerHook interface {
 	Tick(delay time.Duration)
 	Message(msg *stream.Message)
 	Exit(state string)
+	PID(pid int)
 }
 
 type NOOPHook struct {
@@ -19,6 +20,7 @@ type NOOPHook struct {
 func (h *NOOPHook) Tick(delay time.Duration)    {}
 func (h *NOOPHook) Message(msg *stream.Message) {}
 func (h *NOOPHook) Exit(state string)           {}
+func (h *NOOPHook) PID(pid int)                 {}
 
 type DelayHook struct {
 	NOOPHook
@@ -49,5 +51,18 @@ func (h *ExitHook) Exit(state string) {
 
 	h.o.Do(func() {
 		h.Action(s)
+	})
+}
+
+type PIDHook struct {
+	NOOPHook
+	o sync.Once
+
+	Action func(pid int)
+}
+
+func (h *PIDHook) PID(pid int) {
+	h.o.Do(func() {
+		h.Action(pid)
 	})
 }

@@ -45,7 +45,7 @@ func (process *systemProcessImpl) Command() *core.Command {
 func (process *systemProcessImpl) Kill() {
 	//should force system process to exit.
 	if process.process != nil {
-		process.process.Kill()
+		process.process.Terminate()
 	}
 
 	process.killChildren()
@@ -153,7 +153,7 @@ func (process *systemProcessImpl) killChildren() {
 		//kill grand-child process.
 		log.Infof("Killing grandchild process '%d'", child.Pid)
 
-		err := child.Kill()
+		err := child.Terminate()
 		if err != nil {
 			log.Errorf("Failed to kill child process: %s", err)
 		}
@@ -243,7 +243,7 @@ func (process *systemProcessImpl) Run() (<-chan *stream.Message, error) {
 
 		<-outConsumer.Signal()
 		<-errConsumer.Signal()
-		state := process.table.Wait(process.pid)
+		state := process.table.WaitPID(process.pid)
 
 		log.Infof("Process %s exited with state: %d", process.cmd, state.ExitStatus())
 
