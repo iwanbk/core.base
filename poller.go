@@ -92,12 +92,12 @@ func StartSinks(mgr *pm.PM, sinks map[string]*settings.SinkClient) {
 	}
 
 	for _, key := range keys {
-		controller, ok := sinks[key]
+		sinkCl, ok := sinks[key]
 		if !ok {
 			log.Fatalf("No contoller with name '%s'", key)
 		}
 
-		poll := NewSink(key, mgr, controller)
+		poll := NewSink(key, mgr, sinkCl)
 		poll.Run()
 	}
 }
