@@ -147,7 +147,7 @@ func (pm *PM) AddStatsFlushHandler(handler StatsFlushHandler) {
 	pm.statsFlushHandlers = append(pm.statsFlushHandlers, handler)
 }
 
-func (pm *PM) NewRunner(cmd *core.Command, factory process.ProcessFactory, hooksDelay int, hooks ...RunnerHook) (Runner, error) {
+func (pm *PM) NewRunner(cmd *core.Command, factory process.ProcessFactory, hooks ...RunnerHook) (Runner, error) {
 	pm.runnersMux.Lock()
 	defer pm.runnersMux.Unlock()
 
@@ -156,7 +156,7 @@ func (pm *PM) NewRunner(cmd *core.Command, factory process.ProcessFactory, hooks
 		return nil, DuplicateIDErr
 	}
 
-	runner := NewRunner(pm, cmd, factory, hooksDelay, hooks...)
+	runner := NewRunner(pm, cmd, factory, hooks...)
 	pm.runners[cmd.ID] = runner
 
 	go runner.Run()
@@ -164,7 +164,7 @@ func (pm *PM) NewRunner(cmd *core.Command, factory process.ProcessFactory, hooks
 	return runner, nil
 }
 
-func (pm *PM) RunCmd(cmd *core.Command, hooksDelay int, hooks ...RunnerHook) (Runner, error) {
+func (pm *PM) RunCmd(cmd *core.Command, hooks ...RunnerHook) (Runner, error) {
 	factory := GetProcessFactory(cmd)
 	if factory == nil {
 		log.Errorf("Unknow command '%s'", cmd.Command)
@@ -174,7 +174,7 @@ func (pm *PM) RunCmd(cmd *core.Command, hooksDelay int, hooks ...RunnerHook) (Ru
 		return nil, UnknownCommandErr
 	}
 
-	runner, err := pm.NewRunner(cmd, factory, hooksDelay, hooks...)
+	runner, err := pm.NewRunner(cmd, factory, hooks...)
 
 	if err == DuplicateIDErr {
 		log.Errorf("Duplicate job id '%s'", cmd.ID)
@@ -213,7 +213,7 @@ func (pm *PM) processCmds() {
 		case cmd = <-pm.queueMgr.Producer():
 		}
 
-		pm.RunCmd(cmd, -1)
+		pm.RunCmd(cmd)
 	}
 }
 
@@ -305,9 +305,29 @@ func (pm *PM) RunSlice(slice settings.StartupSlice) {
 
 			if canRun {
 				log.Infof("Starting %s", c)
-				pm.RunCmd(c, up.RunningDelay, func(s bool) {
-					state.Release(c.ID, s)
-				})
+				var hook RunnerHook
+
+				if up.RunningDelay >= 0 {
+					d := 2 * time.Second
+					if up.RunningDelay > 0 {
+						d = time.Duration(up.RunningDelay) * time.Second
+					}
+
+					hook = &DelayHook{
+						Delay: d,
+						Action: func() {
+							state.Release(c.ID, true)
+						},
+					}
+				} else {
+					hook = &ExitHook{
+						Action: func(s bool) {
+							state.Release(c.ID, s)
+						},
+					}
+				}
+
+				pm.RunCmd(c, hook)
 			} else {
 				log.Errorf("Can't start %s because one of the dependencies failed", c)
 			}

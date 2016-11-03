@@ -18,39 +18,6 @@ const (
 	meterPeriod = 30 * time.Second
 )
 
-type RunnerHook func(bool)
-
-type WaitHook interface {
-	Hook(ok bool)
-	Wait() bool
-}
-
-type waitHook struct {
-	wg *sync.WaitGroup
-	o  sync.Once
-	ok bool
-}
-
-func NewWaitHook() WaitHook {
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	return &waitHook{
-		wg: wg,
-	}
-}
-
-func (w *waitHook) Hook(ok bool) {
-	w.o.Do(func() {
-		w.ok = ok
-		w.wg.Done()
-	})
-}
-
-func (w *waitHook) Wait() bool {
-	w.wg.Wait()
-	return w.ok
-}
-
 type Runner interface {
 	Command() *core.Command
 	Run()
@@ -68,9 +35,7 @@ type runnerImpl struct {
 	process process.Process
 	statsd  *stats.Statsd
 
-	hooks      []RunnerHook
-	hooksDelay int
-	hookOnce   sync.Once
+	hooks []RunnerHook
 
 	waitOnce sync.Once
 	result   *core.JobResult
@@ -94,7 +59,7 @@ NewRunner creates a new runner object that is bind to this PM instance.
         The process is considered running, if it ran with no errors for 2 seconds, or exited before the 2 seconds passes
         with SUCCESS exit code.
 */
-func NewRunner(manager *PM, command *core.Command, factory process.ProcessFactory, hooksDelay int, hooks ...RunnerHook) Runner {
+func NewRunner(manager *PM, command *core.Command, factory process.ProcessFactory, hooks ...RunnerHook) Runner {
 	statsInterval := command.StatsInterval
 
 	if statsInterval < 30 {
@@ -102,12 +67,11 @@ func NewRunner(manager *PM, command *core.Command, factory process.ProcessFactor
 	}
 
 	runner := &runnerImpl{
-		manager:    manager,
-		command:    command,
-		factory:    factory,
-		kill:       make(chan int),
-		hooks:      hooks,
-		hooksDelay: hooksDelay,
+		manager: manager,
+		command: command,
+		factory: factory,
+		kill:    make(chan int),
+		hooks:   hooks,
 
 		statsd: stats.NewStatsd(
 			command.ID,
@@ -147,22 +111,23 @@ func (runner *runnerImpl) meter() {
 }
 
 func (runner *runnerImpl) run() *core.JobResult {
-	starttime := time.Duration(time.Now().UnixNano()) / time.Millisecond // start time in msec
+	runner.process = runner.factory(runner.manager, runner.command)
 
-	jobresult := core.NewBasicJobResult(runner.command)
-	jobresult.State = core.StateError
-	jobresult.StartTime = int64(starttime)
+	process := runner.process
 
-	defer func() {
-		endtime := time.Duration(time.Now().UnixNano()) / time.Millisecond
-		jobresult.Time = int64(endtime - starttime)
-	}()
-
-	process := runner.factory(runner.manager, runner.command)
-
-	runner.process = process
+	starttime := time.Now()
 
 	channel, err := process.Run()
+	jobresult := core.NewBasicJobResult(runner.command)
+	jobresult.State = core.StateError
+
+	defer func() {
+		jobresult.StartTime = int64(time.Duration(starttime.UnixNano()) / time.Millisecond)
+		endtime := time.Now()
+
+		jobresult.Time = endtime.Sub(starttime).Nanoseconds() / int64(time.Millisecond)
+	}()
+
 	if err != nil {
 		//this basically means process couldn't spawn
 		//which indicates a problem with the command itself. So restart won't
@@ -178,13 +143,11 @@ func (runner *runnerImpl) run() *core.JobResult {
 	stderrBuffer := stream.NewBuffer(StreamBufferSize)
 
 	timeout := runner.timeout()
-	meter := time.After(meterPeriod)
-	var runTimer <-chan time.Time
-	if runner.hooksDelay == 0 {
-		runTimer = time.After(2 * time.Second)
-	} else if runner.hooksDelay > 0 {
-		runTimer = time.After(time.Duration(runner.hooksDelay) * time.Second)
-	}
+	meterTicker := time.NewTicker(meterPeriod)
+	defer meterTicker.Stop()
+
+	handlersTicker := time.NewTicker(1 * time.Second)
+	defer handlersTicker.Stop()
 loop:
 	for {
 		select {
@@ -196,11 +159,13 @@ loop:
 			process.Kill()
 			jobresult.State = core.StateTimeout
 			break loop
-		case <-meter:
+		case <-meterTicker.C:
 			runner.meter()
-			meter = time.After(meterPeriod)
-		case <-runTimer:
-			runner.callHooks(true)
+		case <-handlersTicker.C:
+			d := time.Now().Sub(starttime)
+			for _, hook := range runner.hooks {
+				go hook.Tick(d)
+			}
 		case message := <-channel:
 			if utils.In(stream.ResultMessageLevels, message.Level) {
 				result = message
@@ -215,6 +180,10 @@ loop:
 				runner.statsd.Feed(strings.Trim(message.Message, " "))
 			} else if message.Level == stream.LevelCritical {
 				critical = message.Message
+			}
+
+			for _, hook := range runner.hooks {
+				go hook.Message(message)
 			}
 
 			//by default, all messages are forwarded to the manager for further processing.
@@ -266,8 +235,9 @@ func (runner *runnerImpl) Run() {
 loop:
 	for {
 		result = runner.run()
-		if result.State == core.StateSuccess {
-			runner.callHooks(true)
+
+		for _, hook := range runner.hooks {
+			hook.Exit(result.State)
 		}
 
 		if result.State == core.StateKilled {
@@ -306,15 +276,6 @@ loop:
 		}
 	}
 
-	runner.callHooks(false)
-}
-
-func (runner *runnerImpl) callHooks(s bool) {
-	runner.hookOnce.Do(func() {
-		for _, hook := range runner.hooks {
-			hook(s)
-		}
-	})
 }
 
 func (runner *runnerImpl) Kill() {
