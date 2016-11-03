@@ -239,6 +239,8 @@ func (pm *PM) processWait() {
 			go func() {
 				ch <- &status
 				close(ch)
+				pm.pidsMux.Lock()
+				defer pm.pidsMux.Unlock()
 				delete(pm.pids, pid)
 			}()
 		}
