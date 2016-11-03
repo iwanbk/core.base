@@ -1,9 +1,10 @@
-package settings
+package core
 
 import (
 	"encoding/json"
 	"fmt"
 	"github.com/g8os/core.base/pm/core"
+	"github.com/g8os/core.base/settings"
 	"github.com/g8os/core.base/utils"
 	"github.com/garyburd/redigo/redis"
 	"net/url"
@@ -17,18 +18,18 @@ const (
 /*
 ControllerClient represents an active agent controller connection.
 */
-type SinkClient struct {
+type sinkClient struct {
 	URL   string
 	Redis *redis.Pool
 	ID    string
 }
 
 /*
-GetClient gets a new sink connection with the given identity. Identity is used by the sink client to
+NewSinkClient gets a new sink connection with the given identity. Identity is used by the sink client to
 introduce itself to the sink terminal.
 */
-func (c *SinkConfig) GetClient(id string) (*SinkClient, error) {
-	u, err := url.Parse(c.URL)
+func NewSinkClient(cfg *settings.SinkConfig, id string) (SinkClient, error) {
+	u, err := url.Parse(cfg.URL)
 	if err != nil {
 		return nil, err
 	}
@@ -44,24 +45,28 @@ func (c *SinkConfig) GetClient(id string) (*SinkClient, error) {
 		address = u.Path
 	}
 
-	pool := utils.NewRedisPool(network, address, c.Password)
+	pool := utils.NewRedisPool(network, address, cfg.Password)
 
-	client := &SinkClient{
+	client := &sinkClient{
 		ID:    id,
-		URL:   strings.TrimRight(c.URL, "/"),
+		URL:   strings.TrimRight(cfg.URL, "/"),
 		Redis: pool,
 	}
 
 	return client, nil
 }
 
-func (client *SinkClient) DefaultQueue() string {
+func (client *sinkClient) String() string {
+	return client.URL
+}
+
+func (client *sinkClient) DefaultQueue() string {
 	return fmt.Sprintf("core:default:%v",
 		client.ID,
 	)
 }
 
-func (cl *SinkClient) GetNext(command *core.Command) error {
+func (cl *sinkClient) GetNext(command *core.Command) error {
 	db := cl.Redis.Get()
 	defer db.Close()
 
@@ -73,7 +78,7 @@ func (cl *SinkClient) GetNext(command *core.Command) error {
 	return json.Unmarshal(payload[1], command)
 }
 
-func (cl *SinkClient) Respond(result *core.JobResult) error {
+func (cl *sinkClient) Respond(result *core.JobResult) error {
 	if result.ID == "" {
 		return fmt.Errorf("result with no ID, not pushing results back...")
 	}

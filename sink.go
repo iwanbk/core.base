@@ -15,13 +15,18 @@ type Sink interface {
 	Run()
 }
 
-type redisSink struct {
-	key    string
-	mgr    *pm.PM
-	client *settings.SinkClient
+type SinkClient interface {
+	GetNext(command *core.Command) error
+	Respond(result *core.JobResult) error
 }
 
-func getKeys(m map[string]*settings.SinkClient) []string {
+type sinkImpl struct {
+	key    string
+	mgr    *pm.PM
+	client SinkClient
+}
+
+func getKeys(m map[string]SinkClient) []string {
 	keys := make([]string, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)
@@ -30,8 +35,8 @@ func getKeys(m map[string]*settings.SinkClient) []string {
 	return keys
 }
 
-func NewSink(key string, mgr *pm.PM, client *settings.SinkClient) Sink {
-	poll := &redisSink{
+func NewSink(key string, mgr *pm.PM, client SinkClient) Sink {
+	poll := &sinkImpl{
 		key:    key,
 		mgr:    mgr,
 		client: client,
@@ -40,13 +45,13 @@ func NewSink(key string, mgr *pm.PM, client *settings.SinkClient) Sink {
 	return poll
 }
 
-func (poll *redisSink) handler(cmd *core.Command, result *core.JobResult) {
+func (poll *sinkImpl) handler(cmd *core.Command, result *core.JobResult) {
 	if err := poll.client.Respond(result); err != nil {
 		log.Errorf("Failed to respond to command %s: %s", cmd, err)
 	}
 }
 
-func (poll *redisSink) run() {
+func (poll *sinkImpl) run() {
 	lastError := time.Now()
 
 	poll.mgr.AddRouteResultHandler(core.Route(poll.key), poll.handler)
@@ -55,7 +60,7 @@ func (poll *redisSink) run() {
 		var command core.Command
 		err := poll.client.GetNext(&command)
 		if err != nil {
-			log.Errorf("Failed to get next command from %s: %s", poll.client.URL, err)
+			log.Errorf("Failed to get next command from %s: %s", poll.client, err)
 			if time.Now().Sub(lastError) < ReconnectSleepTime {
 				time.Sleep(ReconnectSleepTime)
 			}
@@ -76,14 +81,14 @@ func (poll *redisSink) run() {
 	}
 }
 
-func (poll *redisSink) Run() {
+func (poll *sinkImpl) Run() {
 	go poll.run()
 }
 
 /*
 StartSinks starts the long polling routines and feed the manager with received commands
 */
-func StartSinks(mgr *pm.PM, sinks map[string]*settings.SinkClient) {
+func StartSinks(mgr *pm.PM, sinks map[string]SinkClient) {
 	var keys []string
 	if len(settings.Settings.Channel.Cmds) > 0 {
 		keys = settings.Settings.Channel.Cmds
