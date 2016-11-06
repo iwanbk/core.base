@@ -9,6 +9,7 @@ import (
 type Startup struct {
 	After        []string
 	RunningDelay int
+	RunningMatch string
 	Name         string
 	Args         map[string]interface{}
 

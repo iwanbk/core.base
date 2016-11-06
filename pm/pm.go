@@ -307,29 +307,40 @@ func (pm *PM) RunSlice(slice settings.StartupSlice) {
 
 			if canRun {
 				log.Infof("Starting %s", c)
-				var hook RunnerHook
+				var hooks []RunnerHook
 
-				if up.RunningDelay >= 0 {
+				if up.RunningMatch != "" {
+					//NOTE: If runner match is provided it take presence over the delay
+					hooks = append(hooks, &MatchHook{
+						Match: up.RunningMatch,
+						Action: func(msg *stream.Message) {
+							log.Infof("Got '%s' from '%s' signal running", msg.Message, c.ID)
+							state.Release(c.ID, true)
+						},
+					})
+				} else if up.RunningDelay >= 0 {
 					d := 2 * time.Second
 					if up.RunningDelay > 0 {
 						d = time.Duration(up.RunningDelay) * time.Second
 					}
 
-					hook = &DelayHook{
+					hook := &DelayHook{
 						Delay: d,
 						Action: func() {
 							state.Release(c.ID, true)
 						},
 					}
-				} else {
-					hook = &NOOPHook{}
+					hooks = append(hooks, hook)
 				}
 
-				pm.RunCmd(c, hook, &ExitHook{
+				hooks = append(hooks, &ExitHook{
 					Action: func(s bool) {
 						state.Release(c.ID, s)
 					},
 				})
+
+				pm.RunCmd(c, hooks...)
+
 			} else {
 				log.Errorf("Can't start %s because one of the dependencies failed", c)
 			}

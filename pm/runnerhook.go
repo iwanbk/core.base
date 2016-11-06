@@ -66,3 +66,19 @@ func (h *PIDHook) PID(pid int) {
 		h.Action(pid)
 	})
 }
+
+type MatchHook struct {
+	NOOPHook
+	Match string
+	o     sync.Once
+
+	Action func(msg *stream.Message)
+}
+
+func (h *MatchHook) Message(msg *stream.Message) {
+	if msg.Message == h.Match {
+		h.o.Do(func() {
+			h.Action(msg)
+		})
+	}
+}
