@@ -195,6 +195,7 @@ func (process *systemProcessImpl) Run() (<-chan *stream.Message, error) {
 	})
 
 	if err != nil {
+		log.Errorf("Failed to start process(%s): %s", process.cmd.ID, err)
 		return nil, err
 	}
 
