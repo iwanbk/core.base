@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	CommandSystem = "system"
+	CommandSystem = "core.system"
 )
 
 var (
