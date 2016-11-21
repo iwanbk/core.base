@@ -69,7 +69,7 @@ func (client *sinkClient) String() string {
 }
 
 func (client *sinkClient) DefaultQueue() string {
-	return fmt.Sprintf("core:default:%v",
+	return fmt.Sprintf("core:%v",
 		client.id,
 	)
 }
