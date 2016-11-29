@@ -16,13 +16,13 @@ const (
 )
 
 type redisLogger struct {
-	coreNum   int
+	coreID    uint64
 	pool      *redis.Pool
 	defaults  []int
 	batchSize int
 }
 
-func NewRedisLogger(coreNum int, address string, password string, defaults []int, batchSize int) Logger {
+func NewRedisLogger(coreID uint64, address string, password string, defaults []int, batchSize int) Logger {
 	if batchSize == 0 {
 		batchSize = defaultBatchSize
 	}
@@ -31,7 +31,7 @@ func NewRedisLogger(coreNum int, address string, password string, defaults []int
 		network = "tcp"
 	}
 	return &redisLogger{
-		coreNum:   coreNum,
+		coreID:    coreID,
 		pool:      utils.NewRedisPool(network, address, password),
 		defaults:  defaults,
 		batchSize: batchSize,
@@ -47,7 +47,7 @@ func (l *redisLogger) Log(cmd *core.Command, msg *stream.Message) {
 	defer db.Close()
 
 	data := map[string]interface{}{
-		"core":    l.coreNum,
+		"core":    l.coreID,
 		"command": *cmd,
 		"message": stream.Message{
 			// need to copy this first because we don't want to
