@@ -10,9 +10,7 @@ import (
 	"time"
 )
 
-/*
-ConfigureLogging attached the correct message handler on top the process manager from the configurations
-*/
+// ConfigureLogging attachs the correct message handler on top the process manager from the configurations
 func ConfigureLogging(coreID uint64) {
 	//apply logging handlers.
 	dbLoggerConfigured := false

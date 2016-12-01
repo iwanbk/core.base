@@ -21,6 +21,7 @@ const (
 	maxQueueLen      = 10000 // max number of logs to hold before redis started
 )
 
+// redisLogger send log to redis queue
 type redisLogger struct {
 	coreID         uint64
 	pool           *redis.Pool
@@ -31,6 +32,7 @@ type redisLogger struct {
 	logQueue       [][]byte
 }
 
+// NewRedisLogger creates new redis logger handler
 func NewRedisLogger(coreID uint64, address string, password string, defaults []int, batchSize int) Logger {
 	if batchSize == 0 {
 		batchSize = defaultBatchSize
